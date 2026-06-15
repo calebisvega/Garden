@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * GARDEN — Botanical Minimalism
+ * Warm cream canvas (#ECECE8), deep forest greens (#2B4937),
+ * serif display type (OPTI Century Expanded Two), clean sans (Instrument Sans),
+ * warm body (Cutive). Nature imagery, quiet interactions.
+ */
+
+/**
+ * OPTI Century Expanded Two — custom display font
+ * Used for: massive "GARDEN" titles, stock tickers, goal labels, section headers.
+ * Falls back to Georgia if not loaded.
+ *
+ * The font files should be placed in public/fonts/
+ */
+@font-face {
+  font-family: "OPTI Century Expanded Two";
+  src:
+    url("/fonts/OPTI-Century-Expanded-Two.woff2.otf") format("opentype"),
+    url("/fonts/OPTI-Century-Expanded-Two.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* Font stacks */
+    --font-opti-century: "OPTI Century Expanded Two", Georgia, "Times New Roman", serif;
+
+    /* Garden Colors */
+    --garden-cream: #ECECE8;
+    --garden-green: #2B4937;
+    --garden-green-deep: #244231;
+    --garden-green-dark: #0E3522;
+    --garden-green-accent: #4FAF6F;
+    --garden-text-light: #F7F5F0;
+  }
+
+  body {
+    @apply font-sans antialiased;
+  }
+}
+
+/* Utility classes for Garden fonts */
+@layer utilities {
+  .font-display {
+    font-family: var(--font-opti-century);
+  }
+  .font-body {
+    font-family: var(--font-cutive, "Cutive", "Courier New", serif);
+  }
+}

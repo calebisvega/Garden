@@ -1,0 +1,342 @@
+# Garden — Cursor AI Context Document
+
+> This file provides Cursor AI with full context about the Garden project —
+> its architecture, design system, data flow, and customization points.
+> Read this before making any changes.
+
+---
+
+## Project Overview
+
+**Garden** is a personal dashboard ("Your Personal OS") built with Next.js 15 (App Router).
+It aggregates live stock data, RSS articles, news headlines, and financial goals into a
+single beautiful page styled with a "Botanical Minimalism" aesthetic. Built for Caleb, a
+23-year-old graphic designer who freelances and is exploring starting his own business.
+
+This is a **Next.js 15** project using the App Router, TypeScript, and Tailwind CSS 3.
+It fetches live data from Yahoo Finance and RSS feeds via server-side API routes, with
+all user customization stored in localStorage via a shared preferences hook.
+
+---
+
+## Architecture
+
+```
+app/
+├── layout.tsx              → Root layout with Google Fonts (Instrument Sans, Cutive)
+├── globals.css             → Design tokens, @font-face for OPTI Century, Tailwind layers
+├── page.tsx                → Main Garden dashboard (client component, reads preferences)
+├── hooks/
+│   └── usePreferences.ts   → Shared preferences hook (localStorage persistence)
+├── preferences/
+│   └── page.tsx            → Preferences editor page (name, tickers, feeds, goals)
+├── api/
+│   ├── stocks/route.ts     → Yahoo Finance stock quotes via yahoo-finance2
+│   ├── feeds/route.ts      → RSS articles + news (GET defaults, POST custom feeds)
+│   └── growth/route.ts     → Plaid-ready placeholder for bank data
+public/
+├── fonts/                  → OPTI Century Expanded Two font files:
+│   ├── OPTI-Century-Expanded-Two.woff2.otf (primary)
+│   ├── OPTI-Century-Expanded-Two.otf (fallback copy)
+│   └── README.md (font usage docs)
+└── garden/                 → Nature photography assets (5 images)
+```
+
+### Data Flow
+
+1. **Client** (`page.tsx`) reads user preferences from `usePreferences()` hook
+2. **Client** calls `/api/stocks` (GET with tickers) and `/api/feeds` (POST with custom feeds)
+3. **Server** API routes fetch from Yahoo Finance and RSS feeds
+4. **Client** renders live data with loading/error states and graceful fallbacks
+5. **Growth section** reads goals directly from localStorage preferences
+
+---
+
+## Design System
+
+### Colors
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| Cream canvas | `#ECECE8` | Page background, hero, outro |
+| Forest green | `#2B4937` | Main content strip background |
+| Deep green | `#244231` | Seeds panel background |
+| Dark green | `#0E3522` | Index switcher circle |
+| Accent green | `#4FAF6F` | Progress bars, highlights |
+| Text light | `#F7F5F0` | Light text on dark backgrounds |
+| Text dark | `#0D2E1D` | Dark text on light panels |
+| Rose muted | `#9B7B80` | Declining stock indicators |
+
+### Typography
+
+| Class | Font | Usage |
+|-------|------|-------|
+| `font-display` | OPTI Century Expanded Two | "GARDEN" titles, stock tickers, section headers, goal labels |
+| `font-sans` (default) | Instrument Sans | UI text, labels, navigation |
+| `font-body` | Cutive | Date/time display, body prose, footer |
+
+### Key Design Principles
+
+- **Lowercase everything** — headings, labels, and UI text are lowercase
+- **Generous whitespace** — sections breathe with large padding and gaps
+- **Nature photography** — 5 images in `public/garden/` provide visual texture
+- **Quiet interactions** — subtle hover states, smooth scroll, no flashy animations
+- **Warm palette** — cream and forest green dominate; no harsh whites or blacks
+- **Mobile-first** — all layouts start mobile, then add `sm:` / `md:` / `lg:` variants
+
+---
+
+## Page Sections (in order)
+
+### 1. Hero
+- Date/time header (font-body, 11px)
+- "good [morning/afternoon/evening] {displayName}, welcome to your" greeting
+- Giant "GARDEN" title (font-display, clamp 3.5rem–12rem)
+- "nourishment awaits" button → smooth scrolls to stream section
+
+### 2. Stream (from Substack)
+- Live RSS articles from user's configured Substack feeds
+- 2-column grid (1-col on mobile) showing title, author, reading time
+- Clickable links open in new tab
+- Data source: `POST /api/feeds` with user's substackFeeds
+
+### 3. Index Switcher
+- Circular dark green navigation element (140px mobile, 190px desktop)
+- 4 labels: stream, seeds, winds, growth
+- Clicking scrolls to that section + highlights active
+- Intersection observer auto-updates as user scrolls
+
+### 4. Seeds (from Robinhood / Yahoo Finance)
+- Live stock quotes using user's configured tickers
+- Shows ticker, company name, % change, direction arrow
+- Green (↗) for up, rose (↘) for down
+- Checkbox circles for marking as "read" (persisted to localStorage)
+- Data source: `GET /api/stocks?tickers={user_tickers}`
+
+### 5. Winds (News)
+- Live news headlines from user's configured news feeds
+- 3-column layout on desktop, single column on mobile
+- Clickable links to full articles
+- Data source: `POST /api/feeds` with user's newsFeeds
+
+### 6. Growth (Financial Goals)
+- Dynamic goal tracker reading from `preferences.growthGoals`
+- Progress bars with percentage circles
+- Goals are editable from the preferences page
+- Future: connect to actual bank API via Plaid
+
+### 7. Outro
+- Lao Tzu quote: "Knowing others is intelligence; knowing yourself is true wisdom."
+- Closing "GARDEN" title
+- Footer with links (preferences → `/preferences`, about us, contact)
+
+---
+
+## API Routes
+
+### GET /api/stocks
+
+**Query params:** `tickers` (comma-separated, e.g., NVDA,AVGO,GOOGL)
+
+**Returns:** `StockQuote[]`
+```ts
+{
+  ticker: string;      // "NVDA"
+  title: string;       // "NVIDIA Corporation"
+  price: number;       // 135.42
+  change: number;      // 2.67
+  changePercent: string; // "+2.01%"
+  direction: "up" | "down";
+  source: string;      // "NMS — USD"
+}
+```
+
+**Package:** `yahoo-finance2` — calls `yahooFinance.quote(ticker)`
+
+### POST /api/feeds
+
+**Body:** `{ type: "articles" | "news", limit?: number, feeds: { url: string, name: string }[] }`
+
+Also supports GET with defaults: `GET /api/feeds?type=articles&limit=8`
+
+**Returns for type=articles:** `Article[]`
+```ts
+{
+  id: string;
+  title: string;
+  author: string;
+  duration: string;    // "around 8 min."
+  url: string;
+  publishedAt: string; // ISO date
+  source: "substack";
+}
+```
+
+**Returns for type=news:** `NewsHeadline[]`
+```ts
+{
+  id: string;
+  title: string;
+  summary: string;     // First 200 chars of content
+  source: string;      // "NYT", "BBC", "CNN", "Wired"
+  url: string;
+  publishedAt: string;
+}
+```
+
+**Package:** `rss-parser` — fetches and parses RSS/XML feeds
+
+### GET/POST /api/growth
+
+**Plaid-ready placeholder.** Currently returns `{ connected: false, goals: [] }`.
+The frontend reads goals from localStorage instead. See "Future Integration: Plaid" below.
+
+---
+
+## User Preferences System
+
+All preferences are stored in localStorage under key `garden:preferences:v1`.
+
+### Schema (`GardenPreferences`)
+```ts
+{
+  displayName: string;           // Greeting name (default: "caleb")
+  tickers: string[];             // Stock ticker symbols
+  substackFeeds: SubstackFeed[]; // { url, name }
+  newsFeeds: NewsFeed[];         // { url, name }
+  growthGoals: GrowthGoal[];     // { id, name, targetAmount, currentAmount }
+}
+```
+
+### Hook: `usePreferences()`
+- Located at `app/hooks/usePreferences.ts`
+- Returns `{ preferences, updatePreferences, loaded, DEFAULT_PREFERENCES }`
+- `updatePreferences(partial)` merges and persists to localStorage
+- Used by both `page.tsx` (reading) and `preferences/page.tsx` (editing)
+
+### Other localStorage Keys
+
+| Key | Purpose |
+|-----|---------|
+| `garden:preferences:v1` | Full user preferences object (JSON) |
+| `garden:seeds-complete:v1` | JSON array of ticker IDs (lowercase) marked as "read" |
+
+Note: The active index (stream/seeds/winds/growth) is tracked via IntersectionObserver — NOT persisted.
+
+---
+
+## Mobile Responsiveness
+
+The layout uses a mobile-first approach with these key responsive behaviors:
+
+| Element | Mobile (< 640px) | Desktop (≥ 768px) |
+|---------|-------------------|---------------------|
+| Hero title | `clamp(3.5rem, 16vw, 12rem)` | Same (fluid) |
+| Index Switcher | 140×140px, centered | 190×190px, right-aligned |
+| Seeds section | Full-width, no forest image | 2-col with forest image |
+| Growth cards | Stacked vertically | Horizontal with side image |
+| Winds section | Single column, no middle image | 3-column grid |
+| Section titles | 36px | 52px → 68px |
+| Footer links | Centered, stacked | Row, space-between |
+| Stream articles | Single column | 2-column grid |
+
+---
+
+## How to Customize
+
+### Via Preferences Page (`/preferences`)
+- **Display name** — changes the greeting
+- **Stock tickers** — add/remove ticker symbols
+- **Substack feeds** — add/remove RSS feed URLs with display names
+- **News feeds** — add/remove news outlet RSS URLs
+- **Growth goals** — add/remove/edit financial goals with targets and current amounts
+
+### Via Code
+- **Add a new section**: Add `GardenIndex` type value, create JSX with id/ref, add to IndexSwitcher
+- **Change images**: Replace files in `public/garden/` and update `IMG` object in `page.tsx`
+- **Change fonts**: Update `layout.tsx` Google Fonts imports and `globals.css` @font-face
+- **Change colors**: Update the hex values in component classNames (no CSS variables used)
+
+---
+
+## Future Integration: Plaid (Bank Sync)
+
+The `/api/growth` route is a placeholder for Plaid integration. To implement:
+
+1. `npm install plaid`
+2. Set environment variables: `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`
+3. Create `/api/plaid/link-token` — generates a Link token for Plaid Link
+4. Create `/api/plaid/exchange` — exchanges public_token for access_token
+5. Store access_token securely (encrypted localStorage or a database)
+6. Update `/api/growth` to call `plaid.accountsBalanceGet()` and map to goals
+7. Update `GrowthSection` to show real balances alongside manual goals
+
+---
+
+## Running the Project
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server (Turbopack)
+npm run dev
+
+# Build for production
+npm run build
+
+# Serve production build
+npm start
+
+# Lint
+npm run lint
+```
+
+The dev server runs at `http://localhost:3000` by default.
+
+---
+
+## Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `next` ^15.1.0 | React framework with App Router |
+| `react` ^19.0.0 | UI library |
+| `tailwindcss` ^3.4.16 | Utility-first CSS |
+| `yahoo-finance2` ^2.14.0 | Live stock quotes from Yahoo Finance |
+| `rss-parser` ^3.13.0 | Parse RSS/Atom feeds |
+
+---
+
+## Deployment Notes
+
+- **Vercel** (recommended): Zero-config Next.js deployment. API routes run as serverless functions.
+- **Railway/Render**: Works with `npm run build && npm start`
+- **Self-hosted**: Standard Node.js server via `next start`
+
+No environment variables are required — the app uses public APIs (Yahoo Finance, public RSS feeds).
+
+---
+
+## Live Hosted Version
+
+A live version of this dashboard is also deployed at:
+- `https://garden.manus.space`
+- `https://gardendash-mbsslwya.manus.space`
+
+That version uses a different stack (Vite + tRPC + Express) but has identical UI and functionality.
+
+---
+
+## Future Ideas
+
+- [x] User preferences panel (customize feeds, tickers, name)
+- [x] Mobile-optimized layout
+- [x] Connect Growth section to configurable goals
+- [ ] Connect Growth section to real bank data (Plaid API)
+- [ ] Add weather widget
+- [ ] Add calendar integration
+- [ ] Dark mode toggle
+- [ ] Add more Substack feeds based on interests
+- [ ] Integrate Spotify "currently playing"
+- [ ] Push notifications for stock alerts
