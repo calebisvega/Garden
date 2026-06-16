@@ -7,6 +7,14 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      colors: {
+        garden: {
+          light: "#C5CBC3",
+          soft: "#9FA59E",
+          green: "#24332F",
+          complement: "#5A7268",
+        },
+      },
       fontFamily: {
         /** OPTI Century Expanded Two (+ fallbacks in globals.css) */
         display: ["var(--font-opti-century)"],

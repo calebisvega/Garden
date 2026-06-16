@@ -17,6 +17,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePreferences, type GrowthGoal } from "./hooks/usePreferences";
+import { useSmoothScroll } from "./hooks/useSmoothScroll";
+import { useIsNightTime } from "./hooks/useIsNightTime";
+import { ShrinkingGardenTitle } from "./components/ShrinkingGardenTitle";
+import { GardenWordmark } from "./components/GardenWordmark";
+import { SeedsVisual } from "./components/SeedsVisual";
+import { StreamIndexNav } from "./components/StreamIndexNav";
+import { HeroGreeting } from "./components/HeroGreeting";
+import { GardenDock } from "./components/GardenDock";
+import { PageLaunchIntro } from "./components/PageLaunchIntro";
 
 type GardenIndex = "stream" | "seeds" | "winds" | "growth";
 
@@ -24,7 +33,9 @@ const SEEDS_STORAGE_KEY = "garden:seeds-complete:v1" as const;
 
 /* ─── Image URLs (local public/garden/ assets) ─── */
 const IMG = {
-  forestPsalm: "/garden/MacBook_Pro_14__-_5-10c12365-4cf6-40a9-9fe8-a3eeec7b2307.png",
+  heroForest: "/garden/hero-forest.png",
+  heroVideo: "/garden/slowgras.mp4",
+  streamVideo: "/garden/stream.mp4",
   blurredForest: "/garden/MacBook_Pro_14__-_2-49c08472-1dc8-40dc-aa4b-09c571ae79a9.png",
   barkTexture: "/garden/MacBook_Pro_14__-_6-871f5f91-c0fc-4402-8256-c71a2bfd9649.png",
   windsTexture: "/garden/MacBook_Pro_14__-_8-197439cb-4ec7-4f53-acc3-2b3f40173f64.png",
@@ -101,13 +112,22 @@ function formatGreeting() {
   const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(now);
   const month = new Intl.DateTimeFormat("en-US", { month: "long" }).format(now);
   const day = now.getDate();
+  const ordinal = (n: number) => {
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+    const mod10 = n % 10;
+    if (mod10 === 1) return `${n}st`;
+    if (mod10 === 2) return `${n}nd`;
+    if (mod10 === 3) return `${n}rd`;
+    return `${n}th`;
+  };
   const hours = now.getHours();
   const minutes = now.getMinutes().toString().padStart(2, "0");
   const isPm = hours >= 12;
   const h12 = ((hours + 11) % 12) + 1;
   const period = hours < 12 ? "morning" : hours < 17 ? "afternoon" : "evening";
   return {
-    dateLabel: `${weekday.toLowerCase()}, ${month.toLowerCase()} ${day}`,
+    dateLabel: `${weekday.toLowerCase()}, ${month.toLowerCase()} ${ordinal(day)}`,
     timeLabel: `${h12}:${minutes} ${isPm ? "pm" : "am"}`,
     period,
   };
@@ -117,7 +137,10 @@ function formatGreeting() {
  * Custom hook to fetch data from our Next.js API routes.
  * Accepts user preferences to customize which tickers/feeds to load.
  */
-function useGardenData(prefs: { tickers: string[]; substackFeeds: { url: string; name: string }[]; newsFeeds: { url: string; name: string }[] }) {
+function useGardenData(
+  prefs: { tickers: string[]; substackFeeds: { url: string; name: string }[]; newsFeeds: { url: string; name: string }[] },
+  prefsLoaded: boolean
+) {
   const [stocks, setStocks] = useState<StockQuote[]>([]);
   const [articles, setArticles] = useState<Article[]>([]);
   const [news, setNews] = useState<NewsHeadline[]>([]);
@@ -129,12 +152,16 @@ function useGardenData(prefs: { tickers: string[]; substackFeeds: { url: string;
   const [newsError, setNewsError] = useState(false);
 
   // Stabilize the dependency arrays
-  const tickersKey = prefs.tickers.join(",");
-  const feedsKey = prefs.substackFeeds.map((f) => f.url).join(",");
-  const newsKey = prefs.newsFeeds.map((f) => f.url).join(",");
+  const tickersKey = (prefs.tickers ?? []).join(",");
+  const feedsKey = (prefs.substackFeeds ?? []).map((f) => f.url).join(",");
+  const newsKey = (prefs.newsFeeds ?? []).map((f) => f.url).join(",");
 
   useEffect(() => {
+    if (!prefsLoaded) return;
+
     // Fetch stocks using user's tickers
+    setStocksLoading(true);
+    setStocksError(false);
     fetch(`/api/stocks?tickers=${tickersKey}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -146,33 +173,41 @@ function useGardenData(prefs: { tickers: string[]; substackFeeds: { url: string;
         setStocksError(true);
       })
       .finally(() => setStocksLoading(false));
-  }, [tickersKey]);
+  }, [tickersKey, prefsLoaded]);
 
   useEffect(() => {
+    if (!prefsLoaded) return;
+
     // Fetch articles using user's substack feeds
+    setArticlesLoading(true);
+    setArticlesError(false);
     fetch("/api/feeds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "articles", limit: 8, feeds: prefs.substackFeeds }),
+      body: JSON.stringify({ type: "articles", limit: 8, feeds: prefs.substackFeeds ?? [] }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
       })
-      .then((data) => setArticles(data))
+      .then((data) => setArticles(Array.isArray(data) ? data : []))
       .catch((err) => {
         console.warn("[Garden] Articles fetch failed:", err);
         setArticlesError(true);
       })
       .finally(() => setArticlesLoading(false));
-  }, [feedsKey]);
+  }, [feedsKey, prefsLoaded, prefs.substackFeeds]);
 
   useEffect(() => {
+    if (!prefsLoaded) return;
+
     // Fetch news using user's news feeds
+    setNewsLoading(true);
+    setNewsError(false);
     fetch("/api/feeds", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "news", limit: 6, feeds: prefs.newsFeeds }),
+      body: JSON.stringify({ type: "news", limit: 6, feeds: prefs.newsFeeds ?? [] }),
     })
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -184,33 +219,36 @@ function useGardenData(prefs: { tickers: string[]; substackFeeds: { url: string;
         setNewsError(true);
       })
       .finally(() => setNewsLoading(false));
-  }, [newsKey]);
+  }, [newsKey, prefsLoaded, prefs.newsFeeds]);
 
   return { stocks, articles, news, stocksLoading, articlesLoading, newsLoading, stocksError, articlesError, newsError };
-}
-
-/* ─── Smooth scroll helper ─── */
-function scrollToSection(id: string) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 }
 
 /* ─── Main Page ─── */
 
 export default function Home() {
   const [activeIndex, setActiveIndex] = useState<GardenIndex>("stream");
+  const [flourishingHidden, setFlourishingHidden] = useState(false);
+  const { scrollTo } = useSmoothScroll();
+  const isNight = useIsNightTime();
   const { completed, toggle } = useSeedCompletion();
   const greeting = useMemo(() => formatGreeting(), []);
   const { preferences, loaded: prefsLoaded } = usePreferences();
 
   const { stocks, articles, news, stocksLoading, articlesLoading, newsLoading, stocksError, articlesError, newsError } =
-    useGardenData({
-      tickers: preferences.tickers,
-      substackFeeds: preferences.substackFeeds,
-      newsFeeds: preferences.newsFeeds,
-    });
+    useGardenData(
+      {
+        tickers: preferences.tickers,
+        substackFeeds: preferences.substackFeeds,
+        newsFeeds: preferences.newsFeeds,
+      },
+      prefsLoaded
+    );
+
+  const streamArticles = useMemo(
+    () => orderStreamArticlesForDisplay(articles, 4),
+    [articles]
+  );
 
   // Section refs for intersection observer
   const sectionRefs = useRef<Record<GardenIndex, HTMLElement | null>>({
@@ -222,6 +260,17 @@ export default function Home() {
 
   // Intersection observer to update active index as user scrolls
   useEffect(() => {
+    const psalmEl = document.getElementById("hero-psalm");
+    if (!psalmEl) return;
+
+    const psalmObserver = new IntersectionObserver(
+      ([entry]) => {
+        setFlourishingHidden(entry.isIntersecting && entry.intersectionRatio > 0.82);
+      },
+      { threshold: [0, 0.4, 0.65, 0.82, 0.95, 1] }
+    );
+    psalmObserver.observe(psalmEl);
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -239,192 +288,231 @@ export default function Home() {
       if (el) observer.observe(el);
     });
 
-    return () => observer.disconnect();
+    return () => {
+      psalmObserver.disconnect();
+      observer.disconnect();
+    };
   }, []);
 
   const handleIndexClick = (id: GardenIndex) => {
     setActiveIndex(id);
-    scrollToSection(id);
+    scrollTo(`#${id}`);
   };
 
   const handleNourishmentClick = () => {
-    scrollToSection("stream");
+    scrollTo("#stream");
   };
 
   return (
-    <main className="min-h-dvh bg-[#ECECE8] text-neutral-900">
-      {/* Hero */}
-      <section className="mx-auto flex w-full max-w-[1280px] flex-col gap-10 px-5 pb-12 pt-8 sm:gap-16 sm:px-6 sm:pb-16 sm:pt-10 md:px-10">
-        <header className="flex items-start justify-between font-body text-[11px] text-neutral-700">
-          <span className="lowercase tracking-wide">{greeting.dateLabel}</span>
-          <span className="lowercase tracking-wide">{greeting.timeLabel}</span>
-        </header>
+    <PageLaunchIntro>
+    <main className="min-h-dvh overflow-x-hidden bg-[#ECECE8] text-neutral-900">
+      {/* Hero — solid cream header, grass video below */}
+      <section id="hero" className="snap-section bg-[#ECECE8] text-black">
+        <div
+          className={`w-full transition-colors duration-500 ${
+            isNight ? "bg-garden-green text-garden-light" : ""
+          }`}
+        >
+          <div className="mx-auto w-full max-w-[1512px] px-5 md:px-14">
+            <HeroGreeting
+              period={greeting.period}
+              displayName={preferences.displayName}
+            />
 
-        <div className="space-y-6 text-center sm:space-y-8">
-          <p className="font-body text-[14px] lowercase leading-snug tracking-wide text-neutral-800 sm:text-[15px]">
-            good {greeting.period} {preferences.displayName},
-            <br />
-            welcome to your
-          </p>
-          <h1 className="font-display text-[clamp(3.5rem,16vw,12rem)] font-normal leading-[0.92] tracking-[-0.03em] text-black">
-            GARDEN
-          </h1>
-          <button
-            type="button"
-            onClick={handleNourishmentClick}
-            className="mx-auto inline-flex items-center justify-center font-body text-[13px] lowercase text-neutral-900 underline decoration-neutral-900/70 underline-offset-[10px] transition hover:translate-y-[1px] hover:decoration-neutral-900 sm:text-[14px]"
-          >
-            nourishment awaits
-          </button>
+            <div className="pb-8 pt-5 md:pb-10 md:pt-6">
+              <ShrinkingGardenTitle
+                isNight={isNight}
+                dateLabel={greeting.dateLabel}
+                timeLabel={greeting.timeLabel}
+                activeIndex={activeIndex}
+                onIndexChange={handleIndexClick}
+                className="w-full text-center text-[clamp(5.25rem,20.5vw,300px)]"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="hero-psalm"
+          className="snap-panel relative left-1/2 h-dvh min-h-dvh w-[100vw] -translate-x-1/2 overflow-hidden leading-[0]"
+        >
+          <HeroVideo />
+          <div className="absolute inset-x-0 top-0 z-10 flex justify-center px-5 pt-6 md:px-14 md:pt-8">
+            <button
+              type="button"
+              onClick={handleNourishmentClick}
+              className={`inline-flex flex-col items-center transition-all duration-[1.4s] ease-out hover:translate-y-px ${
+                flourishingHidden
+                  ? "pointer-events-none translate-y-2 opacity-0"
+                  : "translate-y-0 opacity-100"
+              }`}
+            >
+              <span className="block text-[13px] font-semibold lowercase leading-tight text-garden-light md:text-[16px]">
+                flourishing awaits
+              </span>
+              <span
+                className="mt-[0.35em] block h-[1px] w-full bg-garden-light"
+                aria-hidden
+              />
+            </button>
+          </div>
+          <div className="absolute inset-x-0 bottom-0 z-10 px-5 pb-6 pt-5 sm:px-8 sm:pb-8 md:px-14">
+            <div className="mx-auto grid w-full max-w-[1400px] gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-x-10">
+              <div className="font-sans text-[15px] leading-snug text-garden-light sm:text-[22px] md:text-[32px]">
+                <p>For as high as the heavens are above the earth,</p>
+                <p>so great is His steadfast toward those who fear Him.</p>
+              </div>
+              <p className="font-sans text-[18px] leading-snug text-garden-light sm:text-[24px] md:text-[32px] md:pb-[0.05em]">
+                Psalm 103:11
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* Main content strip */}
-      <section className="bg-[#2B4937] pb-12 pt-6 text-[#ECECE8] sm:pb-16 sm:pt-7">
-        <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 px-4 sm:gap-8 sm:px-6 md:px-10">
-          {/* Top inset image */}
-          <div className="overflow-hidden rounded-[2px] border border-white/10 bg-black/20">
-            <img
-              src={IMG.forestPsalm}
-              alt="Forest Psalm image"
-              className="h-[200px] w-full object-cover object-top transition duration-700 ease-out hover:scale-[1.01] sm:h-[260px] md:h-[340px]"
-            />
-          </div>
+      {/* Stream + rest of dashboard */}
+      <section className="bg-garden-green pb-12 text-garden-light sm:pb-16">
+        {/* Stream — self-contained card */}
+        <div
+          id="stream"
+          ref={(el) => { sectionRefs.current.stream = el; }}
+          className="snap-panel flex h-dvh min-h-dvh items-center scroll-mt-0 p-3 md:p-5"
+        >
+          <div className="stream-card relative h-[min(88dvh,900px)] w-full overflow-hidden bg-garden-green leading-[0]">
+            <StreamVideo />
+            <div className="absolute inset-0 z-10 flex flex-col p-4 sm:p-5 md:p-7">
+                <p className="text-[17px] font-semibold lowercase tracking-wide text-garden-light sm:text-[19px]">
+                  stream,{" "}
+                  <span className="font-normal">from substack</span>
+                  {articlesLoading && (
+                    <span className="ml-2 text-[13px] text-garden-light/50 animate-pulse">
+                      loading...
+                    </span>
+                  )}
+                </p>
 
-          {/* Stream + index */}
-          <div
-            id="stream"
-            ref={(el) => { sectionRefs.current.stream = el; }}
-            className="grid gap-6 sm:gap-8 md:grid-cols-[minmax(0,1.7fr)_minmax(0,0.8fr)] md:items-end scroll-mt-8"
-          >
-            <div className="space-y-5">
-              <p className="text-[13px] font-semibold lowercase tracking-wide text-[#ECECE8]/90 sm:text-[14px]">
-                stream,{" "}
-                <span className="font-normal">from substack</span>
-                {articlesLoading && (
-                  <span className="ml-2 text-[11px] text-[#ECECE8]/50 animate-pulse">
-                    loading...
-                  </span>
-                )}
-              </p>
-              <div className="grid gap-x-8 gap-y-5 sm:gap-x-10 sm:gap-y-6 sm:grid-cols-2">
-                {articles.length > 0
-                  ? articles.slice(0, 4).map((article) => (
-                      <StreamColumn
-                        key={article.id}
-                        title={article.title}
-                        author={article.author}
-                        duration={article.duration}
-                        url={article.url}
-                      />
-                    ))
-                  : articlesLoading
-                    ? [1, 2, 3, 4].map((i) => (
-                        <div key={i} className="space-y-1.5 animate-pulse">
-                          <div className="h-5 w-3/4 rounded bg-[#ECECE8]/10" />
-                          <div className="h-3 w-1/2 rounded bg-[#ECECE8]/10" />
-                        </div>
+                <StreamIndexNav index={activeIndex} onChange={handleIndexClick} />
+
+                <div className="stream-articles-grid mt-auto grid w-full items-end gap-x-6 gap-y-4 md:gap-x-8">
+                  {streamArticles.length > 0
+                    ? streamArticles.map((article) => (
+                        <StreamColumn
+                          key={article.id}
+                          compact
+                          title={article.title}
+                          author={article.author}
+                          duration={article.duration}
+                          url={article.url}
+                        />
                       ))
-                    : articlesError
-                      ? <p className="text-[13px] text-[#ECECE8]/60 col-span-2">Unable to load articles. Check your connection and refresh.</p>
-                      : <p className="text-[13px] text-[#ECECE8]/60 col-span-2">No articles available right now.</p>}
+                    : articlesLoading
+                      ? [1, 2, 3, 4].map((i) => (
+                          <div key={i} className="min-w-0 space-y-2 animate-pulse">
+                            <div className="h-[1.22em] w-full rounded bg-garden-light/15" />
+                            <div className="h-3 w-1/2 rounded bg-garden-light/10" />
+                          </div>
+                        ))
+                      : articlesError
+                        ? <p className="col-span-2 text-[12px] text-garden-light/70 md:col-span-4 sm:text-[13px]">Unable to load articles. Check your connection and refresh.</p>
+                        : <p className="col-span-2 text-[12px] text-garden-light/70 md:col-span-4 sm:text-[13px]">No articles available right now.</p>}
+                </div>
               </div>
             </div>
+        </div>
 
-            <aside className="flex flex-col items-center gap-3 sm:items-end">
-              <span className="text-[13px] font-semibold lowercase tracking-wide text-[#ECECE8]/90 sm:text-[14px]">
-                index
-              </span>
-              <IndexSwitcher index={activeIndex} onChange={handleIndexClick} />
-            </aside>
-          </div>
-
+        <div className="mx-auto flex w-full max-w-[1512px] flex-col gap-6 px-5 pt-6 sm:gap-8 sm:pt-8 md:px-14">
           {/* Seeds */}
           <div
             id="seeds"
             ref={(el) => { sectionRefs.current.seeds = el; }}
-            className="grid gap-0 border-t border-white/10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] scroll-mt-8"
+            className="snap-panel relative h-dvh min-h-dvh scroll-mt-8 overflow-hidden"
           >
-            <div className="hidden overflow-hidden md:block">
-              <img
-                src={IMG.blurredForest}
-                alt="Blurred forest motion"
-                className="h-full min-h-[420px] w-full object-cover"
-              />
+            <div className="absolute inset-0">
+              <SeedsVisual />
+              <div className="absolute inset-0 bg-black/35" aria-hidden />
             </div>
-            <div className="space-y-3 bg-[#244231] p-4 sm:space-y-4 sm:p-6">
-              <p className="text-[12px] lowercase text-[#ECECE8]/90">
-                seeds, from robinhood
-                {stocksLoading && (
-                  <span className="ml-2 animate-pulse">loading...</span>
-                )}
-              </p>
-              <ul className="space-y-2 sm:space-y-3">
-                {stocks.length > 0
-                  ? stocks.map((seed) => {
-                      const isDone = completed.has(seed.ticker.toLowerCase());
-                      return (
-                        <li key={seed.ticker} className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 sm:gap-3">
-                            <span
-                              className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[2px] text-[14px] sm:h-9 sm:w-9 sm:text-[18px] ${
-                                seed.direction === "up" ? "bg-[#5C7C65]" : "bg-[#9B7B80]"
-                              }`}
-                              aria-hidden
-                            >
-                              {seed.direction === "up" ? "↗" : "↘"}
-                            </span>
-                            <div className="leading-tight">
-                              <p className="font-display text-[15px] text-[#ECECE8] sm:text-[19px]">
-                                {seed.title},
-                                <span className="ml-1 font-display text-[14px] sm:ml-2 sm:text-[18px]">
-                                  {seed.changePercent}
+
+            <div className="relative z-10 flex h-full min-h-dvh flex-col">
+              <div className="mx-auto flex w-full max-w-[1512px] items-start justify-between px-5 pt-6 md:px-14 md:pt-8">
+                <span className="inline-flex h-9 w-9" aria-hidden />
+                <p className="pt-1 font-display text-[22px] lowercase tracking-wide text-garden-light sm:text-[28px]">
+                  seeds
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[10px] bg-black/55 text-garden-light/90 backdrop-blur-sm transition hover:bg-black/60"
+                  aria-label="Seeds menu (template)"
+                >
+                  <span className="text-[18px] leading-none" aria-hidden>
+                    ≡
+                  </span>
+                </button>
+              </div>
+
+              <div className="mx-auto flex w-full max-w-[1512px] flex-1 items-center px-5 pb-10 md:px-14">
+                <div className="seeds-glass w-full max-w-[520px]">
+                  <p className="font-display text-[18px] leading-snug text-garden-light sm:text-[20px]">
+                    Today&apos;s positions, at a glance.
+                    {stocksLoading && (
+                      <span className="ml-2 font-sans text-[12px] font-normal text-garden-light/55 sm:text-[13px]">
+                        loading...
+                      </span>
+                    )}
+                  </p>
+
+                  <ul className="mt-4 space-y-3">
+                    {stocks.length > 0
+                      ? stocks.slice(0, 7).map((seed) => {
+                          const isDone = completed.has(seed.ticker.toLowerCase());
+                          const displayPercent = seed.changePercent.replace(/^\+/, "");
+
+                          return (
+                            <li key={seed.ticker} className="flex items-center justify-between gap-4">
+                              <p className="min-w-0 truncate font-sans text-[13px] lowercase text-garden-light sm:text-[14px]">
+                                <span className="font-display text-[16px] tracking-wide sm:text-[18px]">
+                                  {seed.ticker.toUpperCase()}
                                 </span>
+                                <span className="ml-2 text-garden-light/80">{displayPercent}</span>
+                                <span className="ml-2 text-garden-light/45">{formatSeedSubtext(seed)}</span>
                               </p>
-                              <p className="text-[11px] text-[#ECECE8]/90 sm:text-[12px]">
-                                {seed.source}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggle(seed.ticker.toLowerCase())}
-                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-[#0D2E1D] bg-transparent transition-colors duration-200"
-                            aria-label={isDone ? "Mark seed as unread" : "Mark seed as read"}
-                          >
-                            {isDone ? "•" : ""}
-                          </button>
-                        </li>
-                      );
-                    })
-                  : stocksLoading
-                    ? preferences.tickers.map((t) => (
-                        <li key={t} className="flex items-center justify-between animate-pulse">
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-[2px] text-[14px] bg-[#5C7C65]/50 sm:h-9 sm:w-9 sm:text-[18px]">↗</span>
-                            <div className="leading-tight">
-                              <p className="font-display text-[15px] text-[#ECECE8]/50 sm:text-[19px]">{t}</p>
-                              <p className="text-[11px] text-[#ECECE8]/40 sm:text-[12px]">Loading...</p>
-                            </div>
-                          </div>
-                        </li>
-                      ))
-                    : stocksError
-                      ? <li className="text-[13px] text-[#ECECE8]/60">Unable to load stock data. Check your connection and refresh.</li>
-                      : <li className="text-[13px] text-[#ECECE8]/60">No stock data available.</li>}
-              </ul>
-              <p className="max-w-xl text-[13px] leading-snug text-[#ECECE8]/90 sm:text-[14px]">
-                {stocks.length > 0
-                  ? (() => {
-                      const up = stocks.filter((s) => s.direction === "up").length;
-                      const down = stocks.length - up;
-                      return `${up} of ${stocks.length} tickers are up today. ${down > 0 ? `${down} showing decline.` : "All green across the board."} Data refreshed from Yahoo Finance.`;
-                    })()
-                  : "Mixed performance seen this week. Data loading from Yahoo Finance..."}
-              </p>
-              <button className="text-[12px] underline underline-offset-4">
-                for more depth
-              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggle(seed.ticker.toLowerCase())}
+                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/55 bg-white/5 transition hover:bg-white/10"
+                                aria-label={isDone ? "Mark seed as unread" : "Mark seed as read"}
+                              >
+                                {isDone ? (
+                                  <span className="h-2 w-2 rounded-full bg-white/65" aria-hidden />
+                                ) : null}
+                              </button>
+                            </li>
+                          );
+                        })
+                      : stocksLoading
+                        ? preferences.tickers.slice(0, 6).map((t) => (
+                            <li key={t} className="flex items-center justify-between gap-4 animate-pulse">
+                              <div className="h-4 w-44 rounded bg-white/10 sm:w-52" />
+                              <span className="h-7 w-7 rounded-full border border-white/20" />
+                            </li>
+                          ))
+                        : stocksError
+                          ? (
+                            <li className="font-sans text-[13px] text-garden-light/60">
+                              Unable to load stock data. Check your connection and refresh.
+                            </li>
+                          )
+                          : (
+                            <li className="font-sans text-[13px] text-garden-light/60">
+                              No stock data available.
+                            </li>
+                          )}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="seeds-scroll-indicator pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 sm:flex" aria-hidden>
+                <span className="seeds-scroll-thumb" />
+              </div>
             </div>
           </div>
 
@@ -445,15 +533,15 @@ export default function Home() {
       </section>
 
       {/* Outro */}
-      <section className="bg-[#ECECE8] py-12 sm:py-16">
+      <section id="outro" className="snap-section bg-[#ECECE8] py-12 sm:py-16">
         <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-8 px-5 sm:gap-10 sm:px-6 md:px-10">
           <div className="grid gap-6 sm:gap-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)] md:items-center">
             <div className="space-y-4">
-              <p className="font-display text-xl leading-snug text-[#2B4937] sm:text-2xl md:text-3xl">
+              <p className="font-display text-xl leading-snug text-garden-green sm:text-2xl md:text-[32px]">
                 &ldquo;Knowing others is intelligence; knowing yourself is true
                 wisdom.&rdquo;
               </p>
-              <p className="text-xs uppercase tracking-[0.18em] text-neutral-700">
+              <p className="font-display text-lg text-garden-green sm:text-xl md:text-[32px]">
                 Lao Tzu
               </p>
             </div>
@@ -467,15 +555,15 @@ export default function Home() {
           </div>
 
           <div className="space-y-4 pt-4 text-center">
-            <p className="text-sm lowercase text-neutral-700">
+            <p className="font-body text-[18px] lowercase text-neutral-800 sm:text-[25px]">
               that&apos;s all for today,
               <br />
               see you tomorrow in your
             </p>
-            <h2 className="font-display text-[2.8rem] leading-none tracking-tight text-black sm:text-[3.4rem] md:text-[4.6rem]">
-              GARDEN
+            <h2 className="font-display text-[clamp(3rem,12vw,8rem)] leading-none tracking-tight text-black">
+              <GardenWordmark />
             </h2>
-            <div className="mt-4 flex flex-col items-center gap-3 text-[11px] font-body text-neutral-700 sm:flex-row sm:flex-wrap sm:justify-between sm:gap-4">
+            <div className="mt-4 flex flex-col items-center gap-3 font-body text-[11px] text-neutral-800 sm:flex-row sm:flex-wrap sm:justify-between sm:gap-4 sm:text-[13px]">
               <div className="flex flex-wrap gap-4">
                 <Link href="/preferences" className="underline-offset-4 hover:underline">
                   preferences
@@ -492,30 +580,143 @@ export default function Home() {
         </div>
       </section>
     </main>
+    <GardenDock />
+    </PageLaunchIntro>
   );
 }
 
 /* ─── Sub-components ─── */
+
+function StreamVideo() {
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-full w-full min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 scale-[1.18] object-cover object-center blur-[0.65px] brightness-[0.98] contrast-[1.02]"
+      >
+        <source src={IMG.streamVideo} type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-black/45" />
+      <div className="hero-video-noise absolute inset-0 opacity-[0.42] mix-blend-overlay" />
+      <div className="hero-video-noise hero-video-noise-alt absolute inset-0 opacity-[0.22] mix-blend-soft-light" />
+    </div>
+  );
+}
+
+/** Calm grass loop — single layer, no crossfade flicker */
+const HERO_VIDEO_LOOP_START = 0.45;
+const HERO_VIDEO_PLAYBACK_RATE = 0.36;
+
+const heroVideoClassName =
+  "pointer-events-none absolute left-1/2 top-1/2 h-full w-full min-h-full min-w-full -translate-x-1/2 -translate-y-1/2 scale-[1.12] object-cover object-center blur-[0.65px] brightness-[0.98] contrast-[1.02]";
+
+function HeroVideo() {
+  const prepareVideo = (video: HTMLVideoElement) => {
+    video.playbackRate = HERO_VIDEO_PLAYBACK_RATE;
+    video.currentTime = HERO_VIDEO_LOOP_START;
+  };
+
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-garden-green leading-none">
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        aria-label="Slow grass landscape"
+        onLoadedMetadata={(e) => prepareVideo(e.currentTarget)}
+        className={heroVideoClassName}
+      >
+        <source src={IMG.heroVideo} type="video/mp4" />
+      </video>
+      <div className="absolute inset-0 bg-black/45" aria-hidden />
+      <div className="hero-video-noise absolute inset-0 opacity-[0.42] mix-blend-overlay" aria-hidden />
+      <div className="hero-video-noise hero-video-noise-alt absolute inset-0 opacity-[0.22] mix-blend-soft-light" aria-hidden />
+    </div>
+  );
+}
 
 type StreamProps = {
   title: string;
   author: string;
   duration: string;
   url?: string;
+  compact?: boolean;
 };
 
-function StreamColumn({ title, author, duration, url }: StreamProps) {
-  const content = (
+const STREAM_TITLE_MAX_WORDS = 24;
+
+function stripEmojis(text: string) {
+  return text
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\uFE0F/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Keep feed order, but move the shortest title to the last column. */
+function orderStreamArticlesForDisplay<T extends { title: string }>(items: T[], limit = 4): T[] {
+  const selected = items.slice(0, limit);
+  if (selected.length <= 1) return selected;
+
+  let shortestIndex = 0;
+  let shortestLength = stripEmojis(selected[0].title).length;
+
+  for (let i = 1; i < selected.length; i++) {
+    const length = stripEmojis(selected[i].title).length;
+    if (length < shortestLength) {
+      shortestLength = length;
+      shortestIndex = i;
+    }
+  }
+
+  const shortest = selected[shortestIndex];
+  const rest = selected.filter((_, index) => index !== shortestIndex);
+  return [...rest, shortest];
+}
+
+function formatSeedSubtext(seed: StockQuote) {
+  if (seed.source === "Unavailable") return "Market data unavailable";
+  return seed.source.replace(" — ", " - ");
+}
+
+function formatStreamTitle(title: string, maxWords = STREAM_TITLE_MAX_WORDS) {
+  const cleaned = stripEmojis(title);
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return `${words.slice(0, maxWords).join(" ")}…`;
+}
+
+function StreamColumn({ title, author, duration, url, compact = false }: StreamProps) {
+  const cleanedTitle = stripEmojis(title);
+  const displayTitle = compact ? cleanedTitle : formatStreamTitle(cleanedTitle);
+
+  const content = compact ? (
+    <article className="flex w-full flex-col justify-end space-y-2">
+      <h3
+        className="stream-column-title font-display text-[19px] leading-[1.18] text-garden-light sm:text-[22px] sm:leading-[1.16]"
+        title={cleanedTitle}
+      >
+        {displayTitle}
+      </h3>
+      <p className="font-sans text-[12px] leading-snug text-garden-light/55 sm:text-[13px]">
+        {author} – {duration}
+      </p>
+    </article>
+  ) : (
     <article className="space-y-1.5">
-      <div className="flex items-start gap-2">
-        <span className="mt-[6px] inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 border-[#ECECE8]/80 text-[7px]">
-          •
-        </span>
-        <h3 className="font-display text-[16px] leading-[1.05] text-[#ECECE8] sm:text-[19px]">
-          {title}
+      <div className="flex items-start gap-3">
+        <span className="mt-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-garden-light/80" aria-hidden />
+        <h3 className="font-display text-[22px] leading-[1.05] text-garden-light sm:text-[30px]" title={cleanedTitle}>
+          {displayTitle}
         </h3>
       </div>
-      <p className="text-[11px] leading-none text-[#ECECE8]/75 sm:text-[12px]">
+      <p className="pl-10 font-sans text-[16px] leading-none text-garden-light/75 sm:pl-10 sm:text-[24px]">
         {author} – {duration}
       </p>
     </article>
@@ -523,52 +724,96 @@ function StreamColumn({ title, author, duration, url }: StreamProps) {
 
   if (url && url !== "#") {
     return (
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block transition-opacity hover:opacity-80">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="stream-column block w-full outline-none"
+      >
         {content}
       </a>
     );
   }
-  return content;
+  return <div className="stream-column block w-full">{content}</div>;
 }
 
 type IndexProps = {
   index: GardenIndex;
   onChange: (value: GardenIndex) => void;
+  compact?: boolean;
 };
 
-function IndexSwitcher({ index, onChange }: IndexProps) {
+function IndexSwitcher({ index, onChange, compact = false }: IndexProps) {
+  if (compact) {
+    return (
+      <div className="relative h-[72px] w-[72px] sm:h-[84px] sm:w-[84px]">
+        <div className="absolute inset-0 rounded-full bg-garden-green/90" />
+        <IndexItem compact active={index === "stream"} label="stream" className="left-1/2 top-[10px] -translate-x-1/2 sm:top-[12px]" onClick={() => onChange("stream")} />
+        <IndexItem compact active={index === "seeds"} label="seeds" className="left-[10px] top-1/2 -translate-y-1/2 sm:left-[12px]" onClick={() => onChange("seeds")} />
+        <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full border border-garden-light/80" aria-hidden />
+        <IndexItem compact active={index === "winds"} label="winds" className="right-[8px] top-1/2 -translate-y-1/2 sm:right-[10px]" onClick={() => onChange("winds")} />
+        <IndexItem compact active={index === "growth"} label="growth" className="left-1/2 bottom-[8px] -translate-x-1/2 sm:bottom-[10px]" onClick={() => onChange("growth")} />
+      </div>
+    );
+  }
+
   return (
-    <div className="relative h-[140px] w-[140px] sm:h-[190px] sm:w-[190px]">
-      <div className="absolute inset-0 rounded-full bg-[#0E3522]" />
-      <IndexItem active={index === "stream"} label="stream" className="left-1/2 top-[36px] -translate-x-1/2 sm:top-[52px]" onClick={() => onChange("stream")} />
-      <IndexItem active={index === "seeds"} label="seeds" className="left-[32px] top-1/2 -translate-y-1/2 sm:left-[54px]" onClick={() => onChange("seeds")} />
-      <span className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#ECECE8]/80" aria-hidden />
-      <IndexItem active={index === "winds"} label="winds" className="right-[24px] top-1/2 -translate-y-1/2 sm:right-[42px]" onClick={() => onChange("winds")} />
-      <IndexItem active={index === "growth"} label="growth" className="left-1/2 bottom-[30px] -translate-x-1/2 sm:bottom-[46px]" onClick={() => onChange("growth")} />
+    <div className="relative h-[160px] w-[160px] sm:h-[220px] sm:w-[220px] md:h-[290px] md:w-[290px]">
+      <div className="absolute inset-0 rounded-full bg-garden-green" />
+      <IndexItem active={index === "stream"} label="stream" className="left-1/2 top-[28px] -translate-x-1/2 sm:top-[40px] md:top-[52px]" onClick={() => onChange("stream")} />
+      <IndexItem active={index === "seeds"} label="seeds" className="left-[24px] top-1/2 -translate-y-1/2 sm:left-[36px] md:left-[54px]" onClick={() => onChange("seeds")} />
+      <span className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-garden-light/80 md:h-2.5 md:w-2.5" aria-hidden />
+      <IndexItem active={index === "winds"} label="winds" className="right-[18px] top-1/2 -translate-y-1/2 sm:right-[28px] md:right-[42px]" onClick={() => onChange("winds")} />
+      <IndexItem active={index === "growth"} label="growth" className="left-1/2 bottom-[22px] -translate-x-1/2 sm:bottom-[32px] md:bottom-[46px]" onClick={() => onChange("growth")} />
     </div>
   );
 }
 
-function IndexItem({ active, label, className, onClick }: { active: boolean; label: string; className: string; onClick: () => void }) {
+function IndexItem({
+  active,
+  label,
+  className,
+  onClick,
+  compact = false,
+}: {
+  active: boolean;
+  label: string;
+  className: string;
+  onClick: () => void;
+  compact?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`absolute inline-flex items-center gap-1.5 text-[14px] lowercase leading-none transition-colors sm:gap-2 sm:text-[18px] ${active ? "text-white" : "text-[#ECECE8]/80 hover:text-white"} ${className}`}
+      className={`absolute inline-flex items-center gap-1 font-body lowercase leading-none transition-colors ${
+        compact
+          ? "text-[12px] sm:text-[13px]"
+          : "gap-2 text-[18px] leading-[1.4] sm:text-[24px] md:text-[30px] md:leading-[53px]"
+      } ${active ? "text-garden-light" : "text-garden-light/70 hover:text-garden-light"} ${className}`}
     >
       <span>{label}</span>
-      <span className={`inline-flex h-2 w-2 rounded-full border border-[#ECECE8]/80 transition sm:h-2.5 sm:w-2.5 ${active ? "bg-white" : "bg-transparent"}`} aria-hidden />
+      <span
+        className={`inline-flex rounded-full border border-garden-light/80 transition ${
+          compact ? "h-1 w-1" : "h-2 w-2 md:h-2.5 md:w-2.5"
+        } ${active ? "bg-garden-light" : "bg-transparent"}`}
+        aria-hidden
+      />
     </button>
   );
 }
 
 function GrowthSection({ sectionRef, goals }: { sectionRef: (el: HTMLElement | null) => void; goals: GrowthGoal[] }) {
   return (
-    <section id="growth" ref={sectionRef} className="space-y-4 scroll-mt-8">
-      <p className="font-display text-[36px] leading-none text-[#F7F5F0] sm:text-[52px] md:text-[68px]">
-        Growth
-        <span className="text-[12px] text-[#F7F5F0]/90 sm:text-[14px] md:text-[16px]"> your financial goals</span>
-      </p>
+    <section id="growth" ref={sectionRef} className="snap-section space-y-4 scroll-mt-8">
+      <div className="space-y-1">
+        <p className="font-display text-[36px] leading-none text-garden-light sm:text-[52px] md:text-[68px]">
+          Growth
+        </p>
+        <p className="font-sans text-[18px] lowercase text-garden-light/90 sm:text-[28px] md:text-[32px]">
+          from TD BANK, Zillow, Redfin
+        </p>
+      </div>
       <div className="grid gap-4 md:grid-cols-[210px_minmax(0,1fr)] md:items-stretch">
         <div className="hidden overflow-hidden rounded-sm bg-black/20 md:block">
           <img src={IMG.barkTexture} alt="Bark texture" className="h-full w-full object-cover transition duration-700 ease-out hover:scale-[1.02]" />
@@ -578,36 +823,36 @@ function GrowthSection({ sectionRef, goals }: { sectionRef: (el: HTMLElement | n
             goals.map((goal) => {
               const percent = goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0;
               return (
-                <div key={goal.id} className="flex flex-col gap-2 rounded-sm bg-[#123825] p-2 ring-1 ring-white/5 sm:flex-row sm:items-stretch sm:gap-3">
-                  <div className="flex-1 space-y-1 bg-[#F5F5EE] px-2 py-1.5 sm:py-1">
-                    <p className="font-display text-[16px] leading-none text-[#0D2E1D] sm:text-[18px]">
+                <div key={goal.id} className="flex flex-col gap-2 rounded-sm bg-garden-green p-2 ring-1 ring-white/5 sm:flex-row sm:items-stretch sm:gap-3">
+                  <div className="flex-1 space-y-2 bg-[#F5F5EE] px-3 py-2 sm:py-3">
+                    <p className="font-display text-[20px] leading-none text-[#0D2E1D] sm:text-[28px] md:text-[32px]">
                       ${goal.currentAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
-                    <div className="h-2 w-full bg-[#1D3F2D]">
+                    <div className="h-[10px] w-full bg-garden-green/80 sm:h-[25px]">
                       <div
-                        className="h-2 rounded-full bg-[#4FAF6F] transition-[width] duration-500"
+                        className="h-full rounded-full bg-[#4FAF6F] transition-[width] duration-500"
                         style={{ width: `${Math.min(100, percent)}%` }}
                       />
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-3 bg-[#133A26] px-3 py-2 sm:w-44 sm:justify-center sm:py-0">
-                    <p className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-[#0D2E1D] bg-[#3C8A64] font-display text-[28px] text-[#F7F5F0] sm:h-20 sm:w-20 sm:text-[44px]">
+                  <div className="flex items-center justify-between gap-3 bg-garden-green/90 px-3 py-2 sm:w-52 sm:justify-center sm:py-0 md:w-72">
+                    <p className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#0D2E1D] bg-[#3C8A64] font-display text-[24px] text-garden-light sm:h-20 sm:w-20 sm:text-[36px] md:h-[156px] md:w-[156px] md:text-[44px]">
                       {percent}%
                     </p>
                     <div>
-                      <p className="text-[10px] text-[#F7F5F0]/90">of your</p>
-                      <p className="text-[16px] text-[#F7F5F0] sm:text-[20px]">
+                      <p className="font-sans text-[12px] text-garden-light/90 sm:text-[14px]">of your</p>
+                      <p className="font-sans text-[16px] text-garden-light sm:text-[20px]">
                         ${goal.targetAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} goal
                       </p>
                     </div>
                   </div>
-                  <p className="hidden w-28 text-right font-display text-[36px] leading-[0.9] text-[#F7F5F0] lg:block lg:text-[47px]">{goal.name}</p>
+                  <p className="hidden w-28 text-right font-display text-[36px] leading-[0.9] text-garden-light md:block md:w-32 md:text-[47px]">{goal.name}</p>
                 </div>
               );
             })
           ) : (
-            <div className="rounded-sm bg-[#123825] p-4 ring-1 ring-white/5 text-center">
-              <p className="text-[14px] text-[#F7F5F0]/70">No goals set yet.</p>
+            <div className="rounded-sm bg-garden-green p-4 text-center ring-1 ring-white/5">
+              <p className="text-[14px] text-garden-light/70">No goals set yet.</p>
               <Link href="/preferences" className="text-[12px] text-[#4FAF6F] underline underline-offset-4 mt-2 inline-block">
                 Add goals in preferences
               </Link>
@@ -624,11 +869,14 @@ function WindsSection({ sectionRef, news, isLoading, hasError }: { sectionRef: (
   const col3 = news.slice(2, 4);
 
   return (
-    <section id="winds" ref={sectionRef} className="space-y-4 scroll-mt-8">
-      <p className="font-display text-[36px] leading-none text-[#F7F5F0] sm:text-[52px] md:text-[68px]">
+    <section id="winds" ref={sectionRef} className="snap-section space-y-4 scroll-mt-8">
+      <p className="font-display text-[36px] leading-none text-garden-light sm:text-[52px] md:text-[68px]">
         winds
-        <span className="text-[12px] text-[#F7F5F0]/90 sm:text-[14px] md:text-[16px]"> from the New York Times, Bloomberg, CNN, Sherwood and Wired</span>
-        {isLoading && <span className="ml-2 text-[12px] text-[#F7F5F0]/50 animate-pulse">loading...</span>}
+        <span className="font-sans text-[14px] font-normal text-garden-light/90 sm:text-[20px] md:text-[32px]">
+          {" "}
+          from the New York Times, Bloomberg, CNN, Sherwood and Wired
+        </span>
+        {isLoading && <span className="ml-2 text-[12px] text-garden-light/50 animate-pulse">loading...</span>}
       </p>
       <div className="grid gap-6 md:grid-cols-[1.2fr_0.9fr_1fr]">
         <div className="space-y-3">
@@ -640,15 +888,15 @@ function WindsSection({ sectionRef, news, isLoading, hasError }: { sectionRef: (
               <div className="grid grid-cols-[80px_1fr] gap-3 sm:grid-cols-[120px_1fr]">
                 <img src={IMG.windsTexture} alt="Winds texture" className="h-full min-h-[200px] w-full object-cover sm:min-h-[260px]" />
                 <div className="space-y-2">
-                  <p className="text-[13px] leading-snug text-[#ECECE8]/90 sm:text-[14px]">{col1[0].summary}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-[#ECECE8]/50">{col1[0].source}</p>
+                  <p className="text-[13px] leading-snug text-garden-light/90 sm:text-[14px]">{col1[0].summary}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-garden-light/50">{col1[0].source}</p>
                   {col1[1] && (
                     <>
                       <a href={col1[1].url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80 transition-opacity">
                         <h4 className="text-[15px] font-semibold sm:text-[16px]">{col1[1].title}</h4>
                       </a>
-                      <p className="text-[13px] leading-snug text-[#ECECE8]/90 sm:text-[14px]">{col1[1].summary}</p>
-                      <p className="text-[10px] uppercase tracking-wider text-[#ECECE8]/50">{col1[1].source}</p>
+                      <p className="text-[13px] leading-snug text-garden-light/90 sm:text-[14px]">{col1[1].summary}</p>
+                      <p className="text-[10px] uppercase tracking-wider text-garden-light/50">{col1[1].source}</p>
                     </>
                   )}
                 </div>
@@ -660,7 +908,7 @@ function WindsSection({ sectionRef, news, isLoading, hasError }: { sectionRef: (
               <div className="grid grid-cols-[80px_1fr] gap-3 sm:grid-cols-[120px_1fr]">
                 <img src={IMG.windsTexture} alt="Winds texture" className="h-full min-h-[200px] w-full object-cover sm:min-h-[260px]" />
                 <div className={`space-y-2 ${isLoading ? "animate-pulse" : ""}`}>
-                  <p className="text-[14px] leading-snug text-[#ECECE8]/50">{hasError ? "Check your connection and refresh." : "Fetching the latest news from around the world..."}</p>
+                  <p className="text-[14px] leading-snug text-garden-light/50">{hasError ? "Check your connection and refresh." : "Fetching the latest news from around the world..."}</p>
                 </div>
               </div>
             </>
@@ -674,14 +922,14 @@ function WindsSection({ sectionRef, news, isLoading, hasError }: { sectionRef: (
                 <a href={item.url} target="_blank" rel="noopener noreferrer" className="block hover:opacity-80 transition-opacity">
                   <h3 className="text-[15px] font-semibold sm:text-[16px]">{item.title}</h3>
                 </a>
-                <p className="text-[13px] leading-snug text-[#ECECE8]/90 sm:text-[14px]">{item.summary}</p>
-                <p className="text-[10px] uppercase tracking-wider text-[#ECECE8]/50">{item.source}</p>
+                <p className="text-[13px] leading-snug text-garden-light/90 sm:text-[14px]">{item.summary}</p>
+                <p className="text-[10px] uppercase tracking-wider text-garden-light/50">{item.source}</p>
               </div>
             ))
           ) : (
             <div className="space-y-2 animate-pulse">
-              <h3 className="text-[16px] font-semibold text-[#ECECE8]/50">Loading more headlines...</h3>
-              <p className="text-[14px] leading-snug text-[#ECECE8]/40">News from trusted sources is on its way.</p>
+              <h3 className="text-[16px] font-semibold text-garden-light/50">Loading more headlines...</h3>
+              <p className="text-[14px] leading-snug text-garden-light/40">News from trusted sources is on its way.</p>
             </div>
           )}
         </div>

@@ -46,8 +46,8 @@ const DEFAULT_PREFERENCES: GardenPreferences = {
   ],
   growthGoals: [
     { id: "house", name: "House Fund", targetAmount: 10000, currentAmount: 2790.8 },
-    { id: "tax", name: "Tax Fund", targetAmount: 10000, currentAmount: 1200 },
-    { id: "safety", name: "Safety Fund", targetAmount: 10000, currentAmount: 10000 },
+    { id: "tax", name: "Tax Fund", targetAmount: 6000, currentAmount: 720 },
+    { id: "safety", name: "Safety Fund", targetAmount: 2000, currentAmount: 2000 },
     { id: "blank", name: "Blank Fund", targetAmount: 10000, currentAmount: 1500 },
   ],
 };
@@ -63,7 +63,20 @@ export function usePreferences() {
       const raw = window.localStorage.getItem(PREFS_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<GardenPreferences>;
-        setPreferences({ ...DEFAULT_PREFERENCES, ...parsed });
+        setPreferences({
+          ...DEFAULT_PREFERENCES,
+          ...parsed,
+          tickers: Array.isArray(parsed.tickers) ? parsed.tickers : DEFAULT_PREFERENCES.tickers,
+          substackFeeds: Array.isArray(parsed.substackFeeds)
+            ? parsed.substackFeeds
+            : DEFAULT_PREFERENCES.substackFeeds,
+          newsFeeds: Array.isArray(parsed.newsFeeds)
+            ? parsed.newsFeeds
+            : DEFAULT_PREFERENCES.newsFeeds,
+          growthGoals: Array.isArray(parsed.growthGoals)
+            ? parsed.growthGoals
+            : DEFAULT_PREFERENCES.growthGoals,
+        });
       }
     } catch {
       // ignore parse errors, use defaults

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import RssParser from "rss-parser";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const rssParser = new RssParser({
   timeout: 10000,
   headers: {
@@ -118,30 +121,32 @@ export async function POST(request: Request) {
  * Fetch articles from Substack / newsletter RSS feeds
  */
 async function fetchArticles(feeds: FeedSource[], limit: number): Promise<Article[]> {
-  const articles: Article[] = [];
-
-  for (const feed of feeds) {
-    try {
+  const results = await Promise.allSettled(
+    feeds.map(async (feed) => {
       const parsed = await rssParser.parseURL(feed.url);
       const items = (parsed.items ?? []).slice(0, 3);
 
-      for (const item of items) {
-        articles.push({
-          id: item.guid ?? item.link ?? `${feed.name}-${item.title}`,
-          title: (item.title ?? "Untitled").replace(/,\s*$/, ""),
-          author: item.creator ?? item["dc:creator"] ?? parsed.title ?? feed.name,
-          duration: estimateReadingTime(item.contentSnippet ?? item.content),
-          url: item.link ?? "#",
-          publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),
-          source: "substack",
-        });
-      }
-    } catch (err) {
-      console.warn(`[Feeds] Failed to fetch ${feed.name}:`, err);
-    }
+      return items.map((item) => ({
+        id: item.guid ?? item.link ?? `${feed.name}-${item.title}`,
+        title: (item.title ?? "Untitled").replace(/,\s*$/, ""),
+        author: item.creator ?? item["dc:creator"] ?? parsed.title ?? feed.name,
+        duration: estimateReadingTime(item.contentSnippet ?? item.content),
+        url: item.link ?? "#",
+        publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),
+        source: "substack",
+      }));
+    })
+  );
+
+  const articles = results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+
+  if (results.some((result) => result.status === "rejected")) {
+    const failed = results.filter((result) => result.status === "rejected");
+    console.warn(`[Feeds] ${failed.length} article feed(s) failed`);
   }
 
-  // Sort by date descending, take the requested limit
   articles.sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
@@ -153,29 +158,31 @@ async function fetchArticles(feeds: FeedSource[], limit: number): Promise<Articl
  * Fetch news headlines from major outlets
  */
 async function fetchNews(feeds: FeedSource[], limit: number): Promise<NewsHeadline[]> {
-  const headlines: NewsHeadline[] = [];
-
-  for (const feed of feeds) {
-    try {
+  const results = await Promise.allSettled(
+    feeds.map(async (feed) => {
       const parsed = await rssParser.parseURL(feed.url);
       const items = (parsed.items ?? []).slice(0, 3);
 
-      for (const item of items) {
-        headlines.push({
-          id: item.guid ?? item.link ?? `${feed.name}-${item.title}`,
-          title: item.title ?? "Untitled",
-          summary: (item.contentSnippet ?? item.content ?? "").slice(0, 200),
-          source: feed.name,
-          url: item.link ?? "#",
-          publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),
-        });
-      }
-    } catch (err) {
-      console.warn(`[Feeds] Failed to fetch news from ${feed.name}:`, err);
-    }
+      return items.map((item) => ({
+        id: item.guid ?? item.link ?? `${feed.name}-${item.title}`,
+        title: item.title ?? "Untitled",
+        summary: (item.contentSnippet ?? item.content ?? "").slice(0, 200),
+        source: feed.name,
+        url: item.link ?? "#",
+        publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),
+      }));
+    })
+  );
+
+  const headlines = results.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+
+  if (results.some((result) => result.status === "rejected")) {
+    const failed = results.filter((result) => result.status === "rejected");
+    console.warn(`[Feeds] ${failed.length} news feed(s) failed`);
   }
 
-  // Sort by date descending
   headlines.sort(
     (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );

@@ -139,7 +139,7 @@ export default function PreferencesPage() {
               updatePreferences({ displayName: e.target.value });
               flashSaved();
             }}
-            className="w-full max-w-xs bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[16px] text-neutral-900 transition-colors"
+            className="w-full max-w-xs bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[16px] text-neutral-900 transition-colors"
             placeholder="your name"
           />
         </Section>
@@ -150,7 +150,7 @@ export default function PreferencesPage() {
             {preferences.tickers.map((ticker) => (
               <span
                 key={ticker}
-                className="inline-flex items-center gap-2 bg-[#2B4937] text-[#F7F5F0] px-3 py-1.5 rounded-sm font-display text-[14px]"
+                className="inline-flex items-center gap-2 bg-[#24332F] text-[#F7F5F0] px-3 py-1.5 rounded-sm font-display text-[14px]"
               >
                 {ticker}
                 <button
@@ -169,12 +169,12 @@ export default function PreferencesPage() {
               value={newTicker}
               onChange={(e) => setNewTicker(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addTicker()}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-32 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-32 transition-colors"
               placeholder="AAPL"
             />
             <button
               onClick={addTicker}
-              className="font-body text-[12px] text-[#2B4937] underline underline-offset-4 hover:text-black transition-colors"
+              className="font-body text-[12px] text-[#24332F] underline underline-offset-4 hover:text-black transition-colors"
             >
               add ticker
             </button>
@@ -205,7 +205,7 @@ export default function PreferencesPage() {
               type="text"
               value={newFeedName}
               onChange={(e) => setNewFeedName(e.target.value)}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-40 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-40 transition-colors"
               placeholder="Feed name"
             />
             <input
@@ -213,12 +213,12 @@ export default function PreferencesPage() {
               value={newFeedUrl}
               onChange={(e) => setNewFeedUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addFeed()}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] flex-1 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] flex-1 transition-colors"
               placeholder="https://example.substack.com/feed"
             />
             <button
               onClick={addFeed}
-              className="font-body text-[12px] text-[#2B4937] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
+              className="font-body text-[12px] text-[#24332F] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
             >
               add feed
             </button>
@@ -249,7 +249,7 @@ export default function PreferencesPage() {
               type="text"
               value={newNewsName}
               onChange={(e) => setNewNewsName(e.target.value)}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-40 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-40 transition-colors"
               placeholder="Source name"
             />
             <input
@@ -257,12 +257,12 @@ export default function PreferencesPage() {
               value={newNewsUrl}
               onChange={(e) => setNewNewsUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addNewsFeed()}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] flex-1 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] flex-1 transition-colors"
               placeholder="https://rss.example.com/feed.xml"
             />
             <button
               onClick={addNewsFeed}
-              className="font-body text-[12px] text-[#2B4937] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
+              className="font-body text-[12px] text-[#24332F] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
             >
               add source
             </button>
@@ -273,13 +273,13 @@ export default function PreferencesPage() {
         <Section title="growth — financial goals" description="track your savings goals (data stored locally)">
           <div className="space-y-4 mb-6">
             {preferences.growthGoals.map((goal) => (
-              <div key={goal.id} className="bg-[#2B4937]/5 rounded-sm p-4 space-y-3">
+              <div key={goal.id} className="bg-[#24332F]/5 rounded-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <input
                     type="text"
                     value={goal.name}
                     onChange={(e) => updateGoal(goal.id, { name: e.target.value })}
-                    className="bg-transparent font-display text-[18px] text-neutral-900 outline-none border-b border-transparent focus:border-[#2B4937]/30 transition-colors"
+                    className="bg-transparent font-display text-[18px] text-neutral-900 outline-none border-b border-transparent focus:border-[#24332F]/30 transition-colors"
                   />
                   <button
                     onClick={() => removeGoal(goal.id)}
@@ -295,7 +295,7 @@ export default function PreferencesPage() {
                       type="number"
                       value={goal.currentAmount}
                       onChange={(e) => updateGoal(goal.id, { currentAmount: parseFloat(e.target.value) || 0 })}
-                      className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-1 font-body text-[14px] w-28 transition-colors"
+                      className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-1 font-body text-[14px] w-28 transition-colors"
                     />
                   </div>
                   <div>
@@ -304,7 +304,7 @@ export default function PreferencesPage() {
                       type="number"
                       value={goal.targetAmount}
                       onChange={(e) => updateGoal(goal.id, { targetAmount: parseFloat(e.target.value) || 0 })}
-                      className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-1 font-body text-[14px] w-28 transition-colors"
+                      className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-1 font-body text-[14px] w-28 transition-colors"
                     />
                   </div>
                   <div className="flex items-end">
@@ -314,7 +314,7 @@ export default function PreferencesPage() {
                   </div>
                 </div>
                 {/* Progress bar */}
-                <div className="h-2 w-full bg-[#2B4937]/10 rounded-full overflow-hidden">
+                <div className="h-2 w-full bg-[#24332F]/10 rounded-full overflow-hidden">
                   <div
                     className="h-2 bg-[#4FAF6F] rounded-full transition-[width] duration-500"
                     style={{ width: `${Math.min(100, goal.targetAmount > 0 ? (goal.currentAmount / goal.targetAmount) * 100 : 0)}%` }}
@@ -328,14 +328,14 @@ export default function PreferencesPage() {
               type="text"
               value={newGoalName}
               onChange={(e) => setNewGoalName(e.target.value)}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-40 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-40 transition-colors"
               placeholder="Goal name"
             />
             <input
               type="number"
               value={newGoalTarget}
               onChange={(e) => setNewGoalTarget(e.target.value)}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-28 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-28 transition-colors"
               placeholder="Target $"
             />
             <input
@@ -343,12 +343,12 @@ export default function PreferencesPage() {
               value={newGoalCurrent}
               onChange={(e) => setNewGoalCurrent(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addGoal()}
-              className="bg-transparent border-b-2 border-[#2B4937]/30 focus:border-[#2B4937] outline-none py-2 font-body text-[14px] w-28 transition-colors"
+              className="bg-transparent border-b-2 border-[#24332F]/30 focus:border-[#24332F] outline-none py-2 font-body text-[14px] w-28 transition-colors"
               placeholder="Current $"
             />
             <button
               onClick={addGoal}
-              className="font-body text-[12px] text-[#2B4937] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
+              className="font-body text-[12px] text-[#24332F] underline underline-offset-4 hover:text-black transition-colors whitespace-nowrap"
             >
               add goal
             </button>
@@ -356,8 +356,8 @@ export default function PreferencesPage() {
         </Section>
 
         {/* Plaid Integration Note */}
-        <div className="mt-12 p-6 bg-[#2B4937]/5 rounded-sm border border-[#2B4937]/10">
-          <p className="font-display text-[16px] text-[#2B4937] mb-2">future: connect your bank</p>
+        <div className="mt-12 p-6 bg-[#24332F]/5 rounded-sm border border-[#24332F]/10">
+          <p className="font-display text-[16px] text-[#24332F] mb-2">future: connect your bank</p>
           <p className="font-body text-[13px] text-neutral-600 leading-relaxed">
             In a future update, you&apos;ll be able to connect your bank accounts via Plaid to automatically
             sync your savings balances. For now, update your goal amounts manually here.
@@ -390,7 +390,7 @@ function Section({
 }) {
   return (
     <section className="mb-12">
-      <h2 className="font-display text-[22px] text-[#2B4937] mb-1">{title}</h2>
+      <h2 className="font-display text-[22px] text-[#24332F] mb-1">{title}</h2>
       <p className="font-body text-[12px] text-neutral-500 mb-4">{description}</p>
       {children}
     </section>

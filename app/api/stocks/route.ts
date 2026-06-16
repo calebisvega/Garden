@@ -13,63 +13,102 @@ export type StockQuote = {
   source: string;
 };
 
-/**
- * Default tickers to fetch if none specified
- */
 const DEFAULT_TICKERS = ["NVDA", "AVGO", "GOOGL", "RVI", "SPY"];
+const CACHE_TTL_MS = 90_000;
+
+type QuoteResult = {
+  fetchedAt: number;
+  quotes: StockQuote[];
+};
+
+const quoteCache = new Map<string, QuoteResult>();
+
+function cacheKey(tickers: string[]) {
+  return tickers.join(",");
+}
+
+function mapQuote(ticker: string, quote: Record<string, unknown> | undefined): StockQuote {
+  if (!quote) {
+    return {
+      ticker,
+      title: ticker,
+      price: 0,
+      change: 0,
+      changePercent: "N/A",
+      direction: "up",
+      source: "Unavailable",
+    };
+  }
+
+  const price = Number(quote.regularMarketPrice ?? 0);
+  const change = Number(quote.regularMarketChange ?? 0);
+  const changePercent = Number(quote.regularMarketChangePercent ?? 0);
+
+  return {
+    ticker: String(quote.symbol ?? ticker),
+    title: String(quote.shortName ?? quote.longName ?? ticker),
+    price,
+    change,
+    changePercent: `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`,
+    direction: change >= 0 ? "up" : "down",
+    source: `${String(quote.fullExchangeName ?? "Market")} — ${String(quote.currency ?? "USD")}`,
+  };
+}
 
 /**
  * GET /api/stocks?tickers=NVDA,AVGO,GOOGL,RVI,SPY
  *
- * Fetches live stock quotes from Yahoo Finance.
- * Returns an array of StockQuote objects.
+ * Live quotes via Yahoo Finance (batch request + short cache).
+ * For personal Robinhood holdings, see /api/robinhood (future OAuth).
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const tickersParam = searchParams.get("tickers");
-  const tickers = tickersParam
+  const tickers = (tickersParam
     ? tickersParam.split(",").map((t) => t.trim().toUpperCase())
-    : DEFAULT_TICKERS;
+    : DEFAULT_TICKERS
+  ).filter(Boolean).slice(0, 20);
 
-  // Dynamic import to avoid webpack bundling issues with yahoo-finance2
-  const yahooFinanceModule = await import("yahoo-finance2");
-  const yahooFinance = yahooFinanceModule.default;
-
-  const results: StockQuote[] = [];
-
-  for (const ticker of tickers.slice(0, 20)) {
-    try {
-      const quote = await (yahooFinance as any).quote(ticker);
-
-      if (quote) {
-        const price = quote.regularMarketPrice ?? 0;
-        const change = quote.regularMarketChange ?? 0;
-        const changePercent = quote.regularMarketChangePercent ?? 0;
-
-        results.push({
-          ticker: quote.symbol ?? ticker,
-          title: quote.shortName ?? quote.longName ?? ticker,
-          price,
-          change,
-          changePercent: `${changePercent >= 0 ? "+" : ""}${changePercent.toFixed(2)}%`,
-          direction: change >= 0 ? "up" : "down",
-          source: `${quote.fullExchangeName ?? "Market"} — ${quote.currency ?? "USD"}`,
-        });
-      }
-    } catch (err) {
-      console.warn(`[Stocks] Failed to fetch ${ticker}:`, err);
-      // Return a fallback entry so the UI still renders
-      results.push({
-        ticker,
-        title: ticker,
-        price: 0,
-        change: 0,
-        changePercent: "N/A",
-        direction: "up",
-        source: "Unavailable",
-      });
-    }
+  if (tickers.length === 0) {
+    return NextResponse.json([]);
   }
 
-  return NextResponse.json(results);
+  const key = cacheKey(tickers);
+  const cached = quoteCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return NextResponse.json(cached.quotes, {
+      headers: { "Cache-Control": "private, max-age=60" },
+    });
+  }
+
+  const { default: YahooFinance } = await import("yahoo-finance2");
+  const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+
+  try {
+    const raw = await yahooFinance.quote(tickers);
+    const rows = Array.isArray(raw) ? raw : [raw];
+    const bySymbol = new Map(
+      rows.map((row) => [String(row.symbol ?? "").toUpperCase(), row as Record<string, unknown>])
+    );
+
+    const quotes = tickers.map((ticker) => mapQuote(ticker, bySymbol.get(ticker)));
+    quoteCache.set(key, { fetchedAt: Date.now(), quotes });
+
+    return NextResponse.json(quotes, {
+      headers: { "Cache-Control": "private, max-age=60" },
+    });
+  } catch (err) {
+    console.warn("[Stocks] Batch quote failed:", err);
+
+    if (cached) {
+      return NextResponse.json(cached.quotes, {
+        headers: { "Cache-Control": "private, max-age=30" },
+      });
+    }
+
+    return NextResponse.json(
+      tickers.map((ticker) => mapQuote(ticker, undefined)),
+      { status: 503 }
+    );
+  }
 }
