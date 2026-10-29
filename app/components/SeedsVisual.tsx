@@ -7,10 +7,17 @@ const FRAMES = Array.from(
   { length: FRAME_COUNT },
   (_, i) => `/garden/seeds-frames/frame-${String(i + 1).padStart(2, "0")}.png`
 );
-const FRAME_MS = 5000;
+const FRAME_MS = 8000;
 const FADE_MS = 1400;
 
-export function SeedsVisual() {
+type SeedsVisualProps = {
+  compact?: boolean;
+  panel?: boolean;
+  /** Apply heavy blur for glass-panel backgrounds */
+  blurred?: boolean;
+};
+
+export function SeedsVisual({ compact = false, panel = false, blurred = false }: SeedsVisualProps) {
   const [index, setIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const [animate, setAnimate] = useState(true);
@@ -31,9 +38,21 @@ export function SeedsVisual() {
   const activeIndex = animate ? index : 0;
 
   return (
-    <div className="relative h-full min-h-[280px] w-full overflow-hidden bg-black sm:min-h-[360px] md:min-h-[620px]">
+    <div
+      className={`relative w-full overflow-hidden bg-[#24332F] ${
+        panel
+          ? "h-full min-h-full"
+          : compact
+            ? "h-[7.5rem]"
+            : "h-full min-h-[280px] sm:min-h-[360px] md:min-h-[620px]"
+      }`}
+    >
       {!ready && (
-        <div className="absolute inset-0 animate-pulse bg-garden-green/40" aria-hidden />
+        <div
+          className="absolute inset-0 bg-[#24332F] bg-cover bg-center"
+          style={{ backgroundImage: "url(/garden/seeds-visual.png)" }}
+          aria-hidden
+        />
       )}
       {FRAMES.map((src, i) => (
         <img
@@ -41,11 +60,16 @@ export function SeedsVisual() {
           src={src}
           alt={i === activeIndex ? "Stone seeds nestled in tree bark" : ""}
           aria-hidden={i !== activeIndex}
-          className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity ease-in-out ${
-            i === activeIndex ? "opacity-100" : "opacity-0"
-          }`}
+          loading={i === 0 ? "eager" : "lazy"}
+          decoding="async"
+          className={`seeds-visual-image absolute inset-0 h-full w-full object-cover object-center transition-opacity ease-in-out ${
+            blurred ? "scale-[1.18] blur-[18px] saturate-[1.12]" : ""
+          } ${i === activeIndex ? "opacity-100" : "opacity-0"}`}
           style={{ transitionDuration: `${FADE_MS}ms` }}
           onLoad={() => {
+            if (i === 0) setReady(true);
+          }}
+          onError={() => {
             if (i === 0) setReady(true);
           }}
         />

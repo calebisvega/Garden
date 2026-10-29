@@ -30,7 +30,7 @@ export default function RootLayout({
     <html lang="en" className={`${instrumentSans.variable} ${cutive.variable}`}>
       <body className="min-h-dvh bg-[#ECECE8] text-neutral-900">
         <Script id="garden-scroll-top" strategy="beforeInteractive">
-          {`if("scrollRestoration" in history){history.scrollRestoration="manual";}window.scrollTo(0,0);`}
+          {`if("scrollRestoration" in history){history.scrollRestoration="manual";}if(!window.location.hash){window.scrollTo(0,0);}`}
         </Script>
         {children}
       </body>

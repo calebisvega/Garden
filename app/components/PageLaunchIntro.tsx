@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 type IntroPhase = "solid" | "mark" | "reveal" | "complete";
 
@@ -8,23 +8,35 @@ type PageLaunchIntroProps = {
   children: ReactNode;
 };
 
-/** Green hold → brief mark → pause → slow circular wipe with long end settle */
-const MARK_DELAY_MS = 500;
-const REVEAL_DELAY_MS = 1700;
-const CIRCLE_WIPE_MS = 15000;
-const COMPLETE_BUFFER_MS = 500;
+const INTRO_SEEN_KEY = "garden:intro-seen:v1";
+const MARK_DELAY_MS = 400;
+const REVEAL_DELAY_MS = 900;
+const CIRCLE_WIPE_MS = 4200;
+const COMPLETE_BUFFER_MS = 350;
 
 export function PageLaunchIntro({ children }: PageLaunchIntroProps) {
   const [phase, setPhase] = useState<IntroPhase>("solid");
   const [showCurtain, setShowCurtain] = useState(true);
 
+  const finishIntro = useCallback(() => {
+    setPhase("complete");
+    setShowCurtain(false);
+    document.documentElement.classList.remove("garden-intro-active");
+    document.body.style.overflow = "";
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(INTRO_SEEN_KEY, "1");
+      window.dispatchEvent(new Event("garden:intro-complete"));
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
-      setPhase("complete");
-      setShowCurtain(false);
+    const seen = window.sessionStorage.getItem(INTRO_SEEN_KEY) === "1";
+
+    if (reducedMotion || seen) {
+      finishIntro();
       return;
     }
 
@@ -33,13 +45,7 @@ export function PageLaunchIntro({ children }: PageLaunchIntroProps) {
 
     const markTimer = window.setTimeout(() => setPhase("mark"), MARK_DELAY_MS);
     const revealTimer = window.setTimeout(() => setPhase("reveal"), REVEAL_DELAY_MS);
-    const completeTimer = window.setTimeout(() => {
-      setPhase("complete");
-      setShowCurtain(false);
-      document.documentElement.classList.remove("garden-intro-active");
-      document.body.style.overflow = "";
-      window.dispatchEvent(new Event("garden:intro-complete"));
-    }, REVEAL_DELAY_MS + CIRCLE_WIPE_MS + COMPLETE_BUFFER_MS);
+    const completeTimer = window.setTimeout(finishIntro, REVEAL_DELAY_MS + CIRCLE_WIPE_MS + COMPLETE_BUFFER_MS);
 
     return () => {
       window.clearTimeout(markTimer);
@@ -48,7 +54,7 @@ export function PageLaunchIntro({ children }: PageLaunchIntroProps) {
       document.documentElement.classList.remove("garden-intro-active");
       document.body.style.overflow = "";
     };
-  }, []);
+  }, [finishIntro]);
 
   const curtainStyle = {
     "--garden-circle-wipe-ms": `${CIRCLE_WIPE_MS}ms`,
@@ -65,11 +71,17 @@ export function PageLaunchIntro({ children }: PageLaunchIntroProps) {
     <>
       <div className="garden-launch-content">{children}</div>
       {showCurtain && (
-        <div className={curtainClass} style={curtainStyle} aria-hidden>
+        <button
+          type="button"
+          className={curtainClass}
+          style={curtainStyle}
+          aria-label="Skip intro"
+          onClick={finishIntro}
+        >
           {(phase === "solid" || phase === "mark") && (
             <span className="garden-launch-mark" />
           )}
-        </div>
+        </button>
       )}
     </>
   );

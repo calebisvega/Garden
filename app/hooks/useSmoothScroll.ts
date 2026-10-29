@@ -15,6 +15,12 @@ const SNAP_TARGETS = [
   "#outro",
 ] as const;
 
+type SnapTarget = (typeof SNAP_TARGETS)[number];
+
+function isSnapHash(hash: string): hash is SnapTarget {
+  return (SNAP_TARGETS as readonly string[]).includes(hash);
+}
+
 const SNAP_OFFSET = 0;
 const SNAP_SETTLE_MS = 100;
 const SNAP_DURATION = 2.6;
@@ -91,9 +97,20 @@ export function useSmoothScroll() {
     if ("scrollRestoration" in history) {
       history.scrollRestoration = "manual";
     }
-    window.scrollTo(0, 0);
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const initialHash = window.location.hash;
+    const hasInitialHash = isSnapHash(initialHash);
+
+    if (!hasInitialHash) {
+      window.scrollTo(0, 0);
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (hasInitialHash) {
+        document.querySelector(initialHash)?.scrollIntoView({ block: "start" });
+      }
+      return;
+    }
 
     const lenis = new Lenis({
       lerp: 0.05,
@@ -106,7 +123,41 @@ export function useSmoothScroll() {
     });
 
     lenisRef.current = lenis;
-    lenis.scrollTo(0, { immediate: true });
+
+    const scrollToHash = (hash: string, immediate = false) => {
+      if (!isSnapHash(hash)) return;
+      const el = document.querySelector(hash);
+      if (!(el instanceof HTMLElement)) return;
+
+      userHasScrolledRef.current = true;
+      isSnappingRef.current = true;
+      lenis.scrollTo(el, {
+        offset: SNAP_OFFSET,
+        immediate,
+        duration: immediate ? 0 : SCROLL_DURATION,
+        easing: gardenEase,
+        onComplete: () => {
+          isSnappingRef.current = false;
+        },
+      });
+    };
+
+    if (!hasInitialHash) {
+      lenis.scrollTo(0, { immediate: true });
+    }
+
+    const runInitialHashScroll = () => {
+      if (hasInitialHash) scrollToHash(initialHash);
+    };
+
+    window.addEventListener("garden:intro-complete", runInitialHashScroll, { once: true });
+    window.setTimeout(runInitialHashScroll, 180);
+
+    const onHashChange = () => {
+      const hash = window.location.hash;
+      if (isSnapHash(hash)) scrollToHash(hash);
+    };
+    window.addEventListener("hashchange", onHashChange);
 
     const scheduleSnap = () => {
       if (isSnappingRef.current || !userHasScrolledRef.current) return;
@@ -160,6 +211,8 @@ export function useSmoothScroll() {
     return () => {
       unsubscribeScroll();
       window.removeEventListener("wheel", onWheel);
+      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("garden:intro-complete", runInitialHashScroll);
       if (settleTimerRef.current) window.clearTimeout(settleTimerRef.current);
       lenis.destroy();
       lenisRef.current = null;
@@ -179,6 +232,12 @@ export function useSmoothScroll() {
           isSnappingRef.current = false;
         },
       });
+
+      if (typeof target === "string" && isSnapHash(target)) {
+        window.history.replaceState(null, "", target);
+      } else if (target instanceof HTMLElement && target.id) {
+        window.history.replaceState(null, "", `#${target.id}`);
+      }
       return;
     }
 

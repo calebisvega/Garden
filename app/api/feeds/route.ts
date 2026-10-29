@@ -22,6 +22,8 @@ export type Article = {
   url: string;
   publishedAt: string;
   source: string;
+  /** First paragraph excerpt for stream hover preview */
+  summary: string;
 };
 
 /**
@@ -40,6 +42,41 @@ export type NewsHeadline = {
  * Feed source shape (matches preferences)
  */
 type FeedSource = { url: string; name: string };
+
+/** Strip tags and collapse whitespace from RSS HTML/text. */
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** First paragraph of an article for hover previews. */
+function firstParagraph(content?: string, snippet?: string): string {
+  const html = content ?? "";
+  const pMatch = html.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+  let text = pMatch
+    ? stripHtml(pMatch[1])
+    : stripHtml(snippet ?? html);
+
+  if (!pMatch && text) {
+    text = text.split(/\n\n+/)[0]?.trim() ?? text;
+  }
+
+  if (text.length > 320) {
+    const clipped = text.slice(0, 320);
+    const lastSpace = clipped.lastIndexOf(" ");
+    text = `${(lastSpace > 180 ? clipped.slice(0, lastSpace) : clipped).trim()}…`;
+  }
+
+  return text;
+}
 
 /**
  * Estimate reading time from content length
@@ -134,6 +171,7 @@ async function fetchArticles(feeds: FeedSource[], limit: number): Promise<Articl
         url: item.link ?? "#",
         publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),
         source: "substack",
+        summary: firstParagraph(item.content, item.contentSnippet),
       }));
     })
   );
@@ -166,7 +204,7 @@ async function fetchNews(feeds: FeedSource[], limit: number): Promise<NewsHeadli
       return items.map((item) => ({
         id: item.guid ?? item.link ?? `${feed.name}-${item.title}`,
         title: item.title ?? "Untitled",
-        summary: (item.contentSnippet ?? item.content ?? "").slice(0, 200),
+        summary: firstParagraph(item.content, item.contentSnippet),
         source: feed.name,
         url: item.link ?? "#",
         publishedAt: item.isoDate ?? item.pubDate ?? new Date().toISOString(),

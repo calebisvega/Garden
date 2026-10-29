@@ -153,7 +153,7 @@ export function ShrinkingGardenTitle({
 
   const heroTextColor = isNight
     ? "var(--garden-text-light)"
-    : "var(--garden-green-complement)";
+    : "#000000";
 
   const scrollHeader =
     mounted && overlay.showScrollHeader && overlay.visible ? (

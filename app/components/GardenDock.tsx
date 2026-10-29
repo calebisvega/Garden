@@ -1,9 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-
-const DOCK_ITEMS = ["profile", "preferences"] as const;
 
 const PLAYER_PLACEHOLDER = {
   title: "weightless",
@@ -11,15 +10,15 @@ const PLAYER_PLACEHOLDER = {
   elapsed: "00:11:53",
 };
 
-const BOTTOM_TRIGGER_PX = 44;
-const HIDE_DELAY_MS = 380;
+const BOTTOM_TRIGGER_PX = 52;
+const HIDE_DELAY_MS = 420;
 
 export function GardenDock() {
-  const [visible, setVisible] = useState(false);
+  const [arrowVisible, setArrowVisible] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [mounted, setMounted] = useState(false);
   const zoneRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<number | null>(null);
-  const visibleRef = useRef(false);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current !== null) {
@@ -28,25 +27,17 @@ export function GardenDock() {
     }
   }, []);
 
-  const show = useCallback(() => {
-    clearHideTimer();
-    setVisible(true);
-  }, [clearHideTimer]);
-
-  const scheduleHide = useCallback(() => {
+  const scheduleHideArrow = useCallback(() => {
     clearHideTimer();
     hideTimerRef.current = window.setTimeout(() => {
-      setVisible(false);
+      setArrowVisible(false);
+      setExpanded(false);
     }, HIDE_DELAY_MS);
   }, [clearHideTimer]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    visibleRef.current = visible;
-  }, [visible]);
 
   useEffect(() => {
     const pointerNearBottom = (clientY: number) =>
@@ -69,19 +60,16 @@ export function GardenDock() {
 
       const { clientX, clientY } = event;
       if (pointerNearBottom(clientY) || pointerOverDock(clientX, clientY)) {
-        show();
+        clearHideTimer();
+        setArrowVisible(true);
         return;
       }
 
-      if (visibleRef.current) {
-        scheduleHide();
-      }
+      scheduleHideArrow();
     };
 
     const onPointerLeave = () => {
-      if (visibleRef.current) {
-        scheduleHide();
-      }
+      scheduleHideArrow();
     };
 
     window.addEventListener("pointermove", onPointerMove, { passive: true });
@@ -92,48 +80,60 @@ export function GardenDock() {
       document.documentElement.removeEventListener("pointerleave", onPointerLeave);
       clearHideTimer();
     };
-  }, [show, scheduleHide, clearHideTimer]);
+  }, [clearHideTimer, scheduleHideArrow]);
+
+  const zoneClass = [
+    "garden-dock-zone",
+    expanded ? "is-expanded" : "",
+    !expanded && arrowVisible ? "is-arrow-visible" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const dock = (
     <div
       ref={zoneRef}
-      className={`garden-dock-zone${visible ? " is-visible" : ""}`}
-      onPointerEnter={show}
-      onPointerLeave={scheduleHide}
+      className={zoneClass}
+      onPointerEnter={clearHideTimer}
+      onPointerLeave={scheduleHideArrow}
     >
-      <nav className="garden-dock-bar font-sans w-full overflow-hidden" aria-label="Garden dock">
-        <div className="garden-dock-sheen pointer-events-none absolute inset-0" aria-hidden />
-        <div
-          className="garden-dock-texture hero-video-noise pointer-events-none absolute inset-0 opacity-[0.12] mix-blend-overlay"
+      <button
+        type="button"
+        className="garden-dock-toggle seeds-glass-panel"
+        aria-expanded={expanded}
+        aria-label={expanded ? "Hide dock" : "Show dock"}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <svg
+          viewBox="0 0 16 16"
+          className={`garden-dock-toggle-icon ${expanded ? "is-expanded" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
           aria-hidden
-        />
+        >
+          <path d="M4 10 L8 6 L12 10" />
+        </svg>
+      </button>
 
-        <div className="garden-dock-inner relative z-[1] flex w-full items-center justify-center gap-3 sm:justify-between sm:gap-4">
-          <div className="flex items-center gap-0">
-            {DOCK_ITEMS.map((item, index) => (
-              <span key={item} className="contents">
-                {index > 0 ? (
-                  <span className="garden-dock-divider shrink-0" aria-hidden />
-                ) : null}
-                <span className="garden-dock-item shrink-0">{item}</span>
-              </span>
-            ))}
-          </div>
-
-          <div className="garden-dock-player flex min-w-0 items-center gap-2 sm:gap-2.5">
-            <span className="garden-dock-player-label shrink-0">player</span>
+      <nav className="garden-dock-bar seeds-glass-panel font-sans w-full" aria-label="Garden dock">
+        <div className="garden-dock-inner flex w-full items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-0 overflow-x-auto">
+            <Link href="/preferences" className="garden-dock-link shrink-0">
+              preferences
+            </Link>
+            <span className="garden-dock-divider shrink-0" aria-hidden />
+            <span className="garden-dock-label shrink-0">player</span>
             <span className="garden-dock-divider shrink-0" aria-hidden />
             <button
               type="button"
               className="garden-dock-play shrink-0"
               aria-label="Play (template)"
-              tabIndex={-1}
+              tabIndex={expanded ? 0 : -1}
             >
-              <svg
-                viewBox="0 0 12 12"
-                className="h-[0.42rem] w-[0.42rem] fill-current sm:h-[0.48rem] sm:w-[0.48rem]"
-                aria-hidden
-              >
+              <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 fill-current" aria-hidden>
                 <path d="M2.5 1.8 9.8 6 2.5 10.2Z" />
               </svg>
             </button>
@@ -147,6 +147,28 @@ export function GardenDock() {
             <time className="garden-dock-time shrink-0 tabular-nums" dateTime="PT11M53S">
               {PLAYER_PLACEHOLDER.elapsed}
             </time>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-0">
+            <span className="garden-dock-divider shrink-0" aria-hidden />
+            <button
+              type="button"
+              className="garden-dock-icon-btn"
+              aria-label="Profile"
+              tabIndex={expanded ? 0 : -1}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className="h-3.5 w-3.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.35"
+                aria-hidden
+              >
+                <circle cx="8" cy="5.5" r="2.25" />
+                <path d="M3.5 13.5c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" />
+              </svg>
+            </button>
           </div>
         </div>
       </nav>
